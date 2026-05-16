@@ -17,6 +17,11 @@ function doGet(e) {
       var month = parseInt(e.parameter.month, 10);
       var result = getOccupiedDates(room, year, month);
       return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
+    } else if (action === "checkAvailability") {
+      var checkIn = e.parameter.checkIn; // Format YYYY-MM-DD
+      var checkOut = e.parameter.checkOut; // Format YYYY-MM-DD
+      var result = checkAvailability(checkIn, checkOut);
+      return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
     }
   } catch(err) {
     return ContentService.createTextOutput(JSON.stringify({error: err.toString()})).setMimeType(ContentService.MimeType.JSON);
@@ -102,6 +107,37 @@ function getOccupiedDates(room, year, month) {
   });
 
   return occupiedDates;
+}
+
+function checkAvailability(checkInStr, checkOutStr) {
+  var results = {};
+  var checkIn = new Date(checkInStr + "T00:00:00+07:00");
+  var checkOut = new Date(checkOutStr + "T00:00:00+07:00");
+  
+  if (checkOut <= checkIn) {
+      // Invalid range
+      for (var room in CALENDAR_IDS) results[room] = false;
+      return results;
+  }
+  
+  for (var room in CALENDAR_IDS) {
+      var isAvailable = true;
+      var calendar = CalendarApp.getCalendarById(CALENDAR_IDS[room]);
+      if (calendar) {
+          var events = calendar.getEvents(checkIn, checkOut);
+          events.forEach(function(event) {
+              var eStart = event.getStartTime();
+              var eEnd = event.getEndTime();
+              // For all-day events, check if it overlaps the requested days
+              // A conflict is when eStart < checkOut AND eEnd > checkIn
+              if (eStart < checkOut && eEnd > checkIn) {
+                  isAvailable = false;
+              }
+          });
+      }
+      results[room] = isAvailable;
+  }
+  return results;
 }
 
 function saveBooking(bookingData) {

@@ -84,10 +84,14 @@ export default function BookingPage() {
   const [userName, setUserName] = useState("");
   const [userPhone, setUserPhone] = useState("");
   const [guests, setGuests] = useState(2);
+  const [specialRequests, setSpecialRequests] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [occupiedDatesList, setOccupiedDatesList] = useState<string[]>([]);
+  
+  // Availability state
+  const [roomAvailability, setRoomAvailability] = useState<Record<string, boolean> | null>(null);
+  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
 
   const nights =
     checkInDate && checkOutDate
@@ -118,24 +122,38 @@ export default function BookingPage() {
     initLiff();
   }, []);
 
-  // 2. Fetch occupied dates for the selected room
+  // 2. Fetch availability for all rooms when dates change
   useEffect(() => {
-    const fetchOccupiedDates = async () => {
-      if (!selectedRoom || !checkInDate) return;
+    const fetchAvailability = async () => {
+      if (!checkInDate || !checkOutDate) return;
+      
+      setIsCheckingAvailability(true);
+      setRoomAvailability(null); // Clear previous state while loading
+
       try {
-        const year = checkInDate.getFullYear();
-        const month = checkInDate.getMonth();
+        const tzCheckIn = new Date(checkInDate.getTime() - checkInDate.getTimezoneOffset() * 60000);
+        const tzCheckOut = new Date(checkOutDate.getTime() - checkOutDate.getTimezoneOffset() * 60000);
         
-        const res = await fetch(`${SCRIPT_URL}?action=getOccupiedDates&room=${encodeURIComponent(selectedRoom.name)}&year=${year}&month=${month}`);
-        if (!res.ok) return;
-        const dates = await res.json();
-        setOccupiedDatesList((prev) => [...new Set([...prev, ...dates])]);
+        const checkInStr = tzCheckIn.toISOString().split('T')[0];
+        const checkOutStr = tzCheckOut.toISOString().split('T')[0];
+
+        const res = await fetch(`${SCRIPT_URL}?action=checkAvailability&checkIn=${checkInStr}&checkOut=${checkOutStr}`);
+        if (!res.ok) throw new Error("Network error");
+        
+        const availabilityData = await res.json();
+        setRoomAvailability(availabilityData);
       } catch (e) {
-        console.error(e);
+        console.error("Failed to check availability", e);
+      } finally {
+        setIsCheckingAvailability(false);
       }
     };
-    fetchOccupiedDates();
-  }, [selectedRoom, checkInDate]);
+    
+    // Only fetch if checkout is after checkin
+    if (checkOutDate > checkInDate) {
+        fetchAvailability();
+    }
+  }, [checkInDate, checkOutDate]);
 
   // 3. Handle Form Submission
   const handleBooking = async () => {
@@ -152,28 +170,9 @@ export default function BookingPage() {
       setErrorMsg("Please select check-in and check-out dates.");
       return;
     }
-
-    // Double check disabled dates
-    let tempDate = new Date(checkInDate);
-    tempDate.setHours(12,0,0,0);
-    const end = new Date(checkOutDate);
-    end.setHours(12,0,0,0);
-    
-    let isConflict = false;
-    while(tempDate < end) {
-        const tzOffset = tempDate.getTimezoneOffset() * 60000;
-        const localISOTime = (new Date(tempDate.getTime() - tzOffset)).toISOString().split('T')[0];
-        
-        if (occupiedDatesList.includes(localISOTime)) {
-            isConflict = true;
-            break;
-        }
-        tempDate.setDate(tempDate.getDate() + 1);
-    }
-
-    if (isConflict) {
-        setErrorMsg("Your selected dates include unavailable days.");
-        return;
+    if (!selectedRoom) {
+      setErrorMsg("Please select a room.");
+      return;
     }
 
     setIsSubmitting(true);
@@ -187,9 +186,9 @@ export default function BookingPage() {
         name: userName,
         phone: userPhone,
         guests: guests,
-        room: selectedRoom?.name,
+        room: selectedRoom.name,
         dates: dateStr,
-        requests: "",
+        requests: specialRequests,
         lineUserId: lineUserId
     };
 
@@ -211,13 +210,10 @@ export default function BookingPage() {
     }
   };
 
-  const isDateDisabled = (date: Date) => {
-     const tzOffset = date.getTimezoneOffset() * 60000;
-     const localISOTime = (new Date(date.getTime() - tzOffset)).toISOString().split('T')[0];
-     
+  const isPastDate = (date: Date) => {
      const today = new Date();
      today.setHours(0,0,0,0);
-     return date < today || occupiedDatesList.includes(localISOTime);
+     return date < today;
   };
 
   return (
@@ -240,7 +236,7 @@ export default function BookingPage() {
             Find your perfect stay
           </h1>
           <p className="text-muted-foreground mt-1">
-            {isLoggedIn && userName ? `Welcome back, ${userName}!` : "3 beautiful rooms available"}
+            {isLoggedIn && userName ? `Welcome back, ${userName}!` : "Select your dates to check availability"}
           </p>
         </div>
 
@@ -273,7 +269,7 @@ export default function BookingPage() {
                     setCheckOutDate(new Date(date.getTime() + 24 * 60 * 60 * 1000));
                   }
                 }}
-                disabled={isDateDisabled}
+                disabled={isPastDate}
                 className="rounded-lg"
               />
             </PopoverContent>
@@ -305,7 +301,7 @@ export default function BookingPage() {
                 }}
                 disabled={(date) => {
                     const checkInTz = checkInDate ? new Date(checkInDate.getTime() + 24 * 60 * 60 * 1000) : new Date();
-                    return date < checkInTz || isDateDisabled(date);
+                    return date < checkInTz || isPastDate(date);
                 }}
                 className="rounded-lg"
               />
@@ -313,72 +309,94 @@ export default function BookingPage() {
           </Popover>
         </div>
 
-        {/* Nights indicator */}
-        {nights > 0 && (
-          <div className="mb-4 text-center">
+        {/* Nights & Loading indicator */}
+        <div className="mb-4 text-center min-h-[30px]">
+          {isCheckingAvailability ? (
+            <span className="inline-flex items-center gap-2 text-muted-foreground text-sm font-medium">
+              <Loader2 className="h-4 w-4 animate-spin" /> Checking availability...
+            </span>
+          ) : nights > 0 ? (
             <span className="inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-sm font-medium">
               {nights} {nights === 1 ? "night" : "nights"} selected
             </span>
-          </div>
-        )}
+          ) : null}
+        </div>
 
         {/* Room Cards */}
         <div className="space-y-4">
-          {rooms.map((room) => (
-            <Card
-              key={room.id}
-              className="overflow-hidden cursor-pointer active:scale-[0.98] transition-transform bg-card border-border"
-              onClick={() => setSelectedRoom(room)}
-            >
-              <div className="relative h-48 bg-muted">
-                {/* Fallback color or actual image if you have them in public/images */}
-                <div className="absolute inset-0 bg-secondary/50 flex items-center justify-center text-muted-foreground">
-                  <Image
-                      src={room.image}
-                      alt={room.name}
-                      fill
-                      className="object-cover"
-                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                  />
-                  <span>Room Image</span>
-                </div>
-                <div className="absolute top-3 right-3 bg-card/90 backdrop-blur-sm px-2 py-1 rounded-full flex items-center gap-1">
-                  <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
-                  <span className="text-xs font-medium text-foreground">{room.rating}</span>
-                </div>
-              </div>
-              <CardContent className="p-4 relative bg-card">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <h3 className="font-semibold text-lg text-foreground">{room.name}</h3>
-                    <p className="text-sm text-muted-foreground">
-                      {room.description}
-                    </p>
+          {rooms.map((room) => {
+            const isAvailable = roomAvailability ? roomAvailability[room.name] : true;
+            const isDisabled = roomAvailability !== null && !isAvailable;
+
+            return (
+              <Card
+                key={room.id}
+                className={`overflow-hidden transition-all bg-card border-border ${
+                  isDisabled 
+                    ? "opacity-50 grayscale-[50%]" 
+                    : "cursor-pointer active:scale-[0.98] hover:border-primary/50"
+                }`}
+                onClick={() => {
+                  if (!isDisabled) setSelectedRoom(room);
+                }}
+              >
+                <div className="relative h-48 bg-muted">
+                  <div className="absolute inset-0 bg-secondary/50 flex items-center justify-center text-muted-foreground">
+                    <Image
+                        src={room.image}
+                        alt={room.name}
+                        fill
+                        className="object-cover"
+                        onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
+                  </div>
+                  
+                  {isDisabled && (
+                    <div className="absolute inset-0 bg-background/60 backdrop-blur-[2px] flex items-center justify-center z-10">
+                      <span className="bg-destructive text-destructive-foreground px-4 py-2 rounded-full font-bold shadow-sm">
+                        Unavailable for these dates
+                      </span>
+                    </div>
+                  )}
+
+                  <div className="absolute top-3 right-3 bg-card/90 backdrop-blur-sm px-2 py-1 rounded-full flex items-center gap-1 z-0">
+                    <Star className="h-3 w-3 fill-amber-400 text-amber-400" />
+                    <span className="text-xs font-medium text-foreground">{room.rating}</span>
                   </div>
                 </div>
-                <div className="flex items-center justify-between mt-3">
-                  <div className="flex items-center gap-3 text-muted-foreground">
-                    <div className="flex items-center gap-1">
-                      <Users className="h-4 w-4" />
-                      <span className="text-xs">{room.capacity}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Wifi className="h-4 w-4" />
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Coffee className="h-4 w-4" />
+                <CardContent className="p-4 relative bg-card">
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <h3 className="font-semibold text-lg text-foreground">{room.name}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {room.description}
+                      </p>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <span className="text-xl font-bold text-primary">
-                      ฿{room.price}
-                    </span>
-                    <span className="text-sm text-muted-foreground">/night</span>
+                  <div className="flex items-center justify-between mt-3">
+                    <div className="flex items-center gap-3 text-muted-foreground">
+                      <div className="flex items-center gap-1">
+                        <Users className="h-4 w-4" />
+                        <span className="text-xs">{room.capacity}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Wifi className="h-4 w-4" />
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Coffee className="h-4 w-4" />
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-xl font-bold text-primary">
+                        ฿{room.price}
+                      </span>
+                      <span className="text-sm text-muted-foreground">/night</span>
+                    </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                </CardContent>
+              </Card>
+            );
+          })}
         </div>
       </main>
 
@@ -490,6 +508,15 @@ export default function BookingPage() {
                   className="w-full p-3 rounded-lg border border-border bg-background"
                 />
               </div>
+              <div>
+                <label className="text-sm font-medium text-foreground mb-1 block">Special Requests (Optional)</label>
+                <textarea 
+                  value={specialRequests} 
+                  onChange={e => setSpecialRequests(e.target.value)}
+                  className="w-full p-3 rounded-lg border border-border bg-background min-h-[80px]"
+                  placeholder="e.g., Early check-in, extra pillows"
+                />
+              </div>
 
               {errorMsg && (
                 <div className="p-3 rounded-lg bg-red-50 text-red-600 text-sm font-medium">
@@ -516,13 +543,18 @@ export default function BookingPage() {
 
       {/* Bottom Navigation Bar */}
       {!selectedRoom && (
-        <nav className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border px-4 py-3">
+        <nav className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border px-4 py-3 z-30">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-xs text-muted-foreground">Starting from</p>
               <p className="text-lg font-bold text-primary">฿1490/night</p>
             </div>
-            <Button className="h-12 px-6 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
+            <Button 
+                className="h-12 px-6 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
+                onClick={() => {
+                    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                }}
+            >
               View All Rooms
             </Button>
           </div>
