@@ -541,25 +541,6 @@ export default function BookingPage() {
         </div>
       )}
 
-      {/* Bottom Navigation Bar */}
-      {!selectedRoom && (
-        <nav className="fixed bottom-0 left-0 right-0 bg-card/95 backdrop-blur-sm border-t border-border px-4 py-3 z-30">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-muted-foreground">Starting from</p>
-              <p className="text-lg font-bold text-primary">฿1490/night</p>
-            </div>
-            <Button 
-                className="h-12 px-6 bg-primary hover:bg-primary/90 text-primary-foreground font-semibold"
-                onClick={() => {
-                    window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-                }}
-            >
-              View All Rooms
-            </Button>
-          </div>
-        </nav>
-      )}
     </div>
   );
 }
