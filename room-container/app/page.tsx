@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/popover";
 
 // SCRIPT CONFIG
-const SCRIPT_URL = "YOUR_GOOGLE_WEB_APP_URL_HERE";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzGSIajG8jQf-vw7ViZeMEL5GGWSg0ZR1EjnCVJ-k2zJ1EzxPDNhd5np9Rix1qy90MU/exec";
 
 interface Room {
   id: number;

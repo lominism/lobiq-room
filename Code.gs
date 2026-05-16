@@ -1,8 +1,8 @@
 // --- CONFIGURATION ---
 const CALENDAR_IDS = {
-  "Garden Suite": "28129fe85edf0db18ad3351dbbc79338b6b32e8680c85e78c955b987ffe4be20@group.calendar.google.com",
-  "Sunset Room": "1f8cb6a90b262eb1fa7d2d6449f5ca321bec9e4432f1124c21480666ad69e32e@group.calendar.google.com",
-  "Coastal Retreat": "da9bb6dca80bbd4e19199a39b93a0249a267abb604e6df7931a5bbacc901d28f@group.calendar.google.com"
+  "Garden Suite": "facc3940813826e1cf69428fd39b15cf1a1f4e87a39596affb1fc5a1fb27632c@group.calendar.google.com",
+  "Sunset Room": "c0742ef06d9202f2e3e17a4f8fb088a1351dcb7d096aa9418003393b761fc806@group.calendar.google.com",
+  "Coastal Retreat": "360fbcc1fc3d8f9d08b1e32c9218eb01e0a2d0ffd03cfe599f0deece04b3e36b@group.calendar.google.com"
 };
 
 const LINE_TOKEN = "z+nusBs0AYzDDQDusEB0pJsFgnfOXcyJjq+Mnl22WBAG6vXsIxW18bVxdQGLoqZSsaoy5hsIYnpTfqoCGd3F5RfDv/qLTwkMk/SGDV3WrPunG91koFrVmuX1o2ykdk11G1YScyCF82K5ldAOlz1xKQdB04t89/1O/w1cDnyilFU=";
