@@ -101,7 +101,7 @@ export default function BookingPage() {
         // @ts-ignore
         if (window.liff) {
           // @ts-ignore
-          await window.liff.init({ liffId: "YOUR_ROOM_LIFF_ID_HERE" });
+          await window.liff.init({ liffId: "2010105878-XWk39R8l" });
           // @ts-ignore
           if (window.liff.isLoggedIn()) {
             setIsLoggedIn(true);
